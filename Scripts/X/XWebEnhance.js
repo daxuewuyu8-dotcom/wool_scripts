@@ -33,7 +33,7 @@ try {
 
         // 2. 修改 legacy 字段中的语种
         // 提示：如果你的推文是中文，将其改为 "en" 才会触发浏览器的翻译按钮显示
-        if (tweetData.legacy) {
+        if (tweetData.legacy?.lang !== "zh") {
           tweetData.legacy.lang = "en";
         }
       }
