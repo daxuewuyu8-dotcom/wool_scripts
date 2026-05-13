@@ -1,10 +1,10 @@
 /**
  * @author fmz200
- * @function X(Twitter)网页版去广告
- * @date 2026-04-26 09:30:00
+ * @function X(Twitter)网页版功能增强
+ * @date 2026-05-14 00:30:00
  */
 
-const $ = new Env("X(Twitter)网页版去广告");
+const $ = new Env("X(Twitter)网页版功能增强");
 let req_url = $request.url;
 let rsp_body = "{}";
 // 检查 $response 是否已定义
@@ -16,62 +16,155 @@ if (typeof $response !== 'undefined' && $response !== null) {
 let mod_rsp = rsp_body;
 try {
   mod_rsp = JSON.parse(rsp_body);
+  
+  // 开启“翻译”按钮
+  if (req_url.includes("/HomeTimeline") || req_url.includes("/TweetDetail")) {
+    // 递归函数：寻找推文对象并开启翻译开关
+    const enableTranslate = (result) => {
+      if (!result) return;
 
-  // "为你推荐"页面
-  if (req_url.includes("/HomeTimeline")) {
-    if (mod_rsp.data && mod_rsp.data.home && mod_rsp.data.home.home_timeline_urt) {
-      let instructions = mod_rsp.data.home.home_timeline_urt.instructions;
+      // 1. 处理标准的推文结果
+      let tweet = result.tweet || result;
+      if (tweet.__typename === "Tweet" || tweet.__typename === "TweetWithVisibilityResults") {
+        if (tweet.tweet) tweet = tweet.tweet; // 兼容嵌套结构
+        tweet.is_translatable = true; // 核心修改：强制开启翻译
+      }
 
-      instructions.forEach((instruction) => {
-        if (instruction.entries) {
-          // 过滤掉所有 Promoted (广告) 条目
-          instruction.entries = instruction.entries.filter((entry) => {
-            const isPromoted = entry.entryId.includes("promoted-tweet") || entry.content?.itemContent?.promotedMetadata;
-            if (isPromoted) {
-              console.log(`❌HomeTimeline去除广告条目：${entry.entryId}`);
-            }
-            return !isPromoted;
-          });
-        }
-      });
-    }
-  }
+      // 2. 处理转发 (Retweet)
+      if (tweet.legacy?.retweeted_status_result) {
+        enableTranslate(tweet.legacy.retweeted_status_result);
+      }
 
-  // "评论区"广告
-  if (req_url.includes("/TweetDetail")) {
-    let instructions = mod_rsp.data?.threaded_conversation_with_injections_v2?.instructions;
+      // 3. 处理引用推文 (Quote Tweet)
+      if (tweet.quoted_status_result) {
+        enableTranslate(tweet.quoted_status_result);
+      }
+    };
+
+    // 遍历指令流
+    let instructions =
+      mod_rsp.data?.home?.home_timeline_urt?.instructions ||
+      mod_rsp.data?.threaded_conversation_with_injections_v2?.instructions;
 
     if (instructions) {
+      console.log(`✅开启翻译按钮执行开始❗️`);
       instructions.forEach((instruction) => {
         if (instruction.entries) {
-          instruction.entries = instruction.entries.filter((entry) => {
-            // 1. 检查 Entry 层级是否为广告
-            const isDirectAd = entry.entryId?.includes("promoted") || entry.content?.itemContent?.promotedMetadata;
-            if (isDirectAd) {
-              console.log(`❌TweetDetail去除广告条目1：${entry.entryId}`);
-              return false;
+          instruction.entries.forEach((entry) => {
+            // 处理普通信息流推文
+            let tweetResult = entry.content?.itemContent?.tweet_results?.result;
+            if (tweetResult) {
+              enableTranslate(tweetResult);
             }
 
-            // 2. 检查内部嵌套的 Items (常见于详情页推荐或回复区广告)
+            // 处理模块化推文 (例如详情页下的相关回复)
             if (entry.content?.items) {
-              entry.content.items = entry.content.items.filter((item) => {
-                const itemContent = item.item?.itemContent || item.itemContent;
-                const isItemAd = item.entryId?.includes("promoted") || itemContent?.promotedMetadata;
-                if (isItemAd) {
-                  console.log(`❌TweetDetail去除广告条目2：${item.entryId}`);
+              entry.content.items.forEach((item) => {
+                let itemTweetResult = item.item?.itemContent?.tweet_results?.result;
+                if (itemTweetResult) {
+                  enableTranslate(itemTweetResult);
                 }
-                return !isItemAd;
               });
-
-              // 如果模块内的广告被删光了，则删除整个模块条目
-              if (entry.content.items.length === 0) return false;
             }
-
-            return true;
           });
         }
       });
     }
+    console.log(`✅开启翻译按钮执行完成`);
+  }
+
+  // "顶部标签页" - 返回固定的 PinnedTimelines 数据
+  if (req_url.includes("/PinnedTimelines?")) {
+    mod_rsp = {
+      "data": {
+        "pinned_timelines": {
+          "pinned_timelines": [
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Politics, Government, Elections, Policy, Congress",
+              "icon_name": "topic_politics",
+              "name": "政治",
+              "scribe": "1925952771733262336",
+              "tab_label": "政治",
+              "tag": "1925952771733262336"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Interest Rates, Federal Reserve, Bonds, Options, Futures, Employment, Energy, Oil, Stocks, Macroeconomics, Economy",
+              "icon_name": "topic_business",
+              "name": "股票与经济",
+              "scribe": "1925952876284727296",
+              "tab_label": "股票",
+              "tag": "1925952876284727296"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Business & Finance, Economy, Markets, Investing, Corporate",
+              "icon_name": "topic_business",
+              "name": "商业与金融",
+              "scribe": "1925949659857530880",
+              "tab_label": "商业",
+              "tag": "1925949659857530880"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Science, Research, Discovery, Biology, Physics",
+              "icon_name": "topic_science",
+              "name": "科学",
+              "scribe": "1925949744683114496",
+              "tab_label": "科学",
+              "tag": "1925949744683114496"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Artificial Intelligence, AI, Machine Learning, ChatGPT, LLM",
+              "icon_name": "topic_ai",
+              "name": "人工智能",
+              "scribe": "1925953013547450368",
+              "tab_label": "AI",
+              "tag": "1925953013547450368"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Cryptocurrency, Crypto, Bitcoin, Ethereum, Blockchain",
+              "icon_name": "topic_crypto",
+              "name": "加密货币",
+              "scribe": "1925949693290295298",
+              "tab_label": "加密",
+              "tag": "1925949693290295298"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "News, Breaking News, Headlines, Journalism, Current Events",
+              "icon_name": "topic_news",
+              "name": "新闻",
+              "scribe": "1925949634972626944",
+              "tab_label": "新闻",
+              "tag": "1925949634972626944"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Personal Finance, Budgeting, Saving, Money, Investing",
+              "icon_name": "topic_biz_finance",
+              "name": "个人理财",
+              "scribe": "1925952988486447104",
+              "tab_label": "金融",
+              "tag": "1925952988486447104"
+            },
+            {
+              "__typename": "TagPinnedTimeline",
+              "description": "Software Development, Programming, Coding, Developer, Open Source",
+              "icon_name": "topic_software",
+              "name": "软件开发",
+              "scribe": "1925953040130953216",
+              "tab_label": "软件",
+              "tag": "1925953040130953216"
+            }
+          ]
+        }
+      }
+    };
+    console.log(`✅PinnedTimelines返回固定的标签页数据`);
   }
 } catch (error) {
   console.log('脚本运行出现错误，部分广告未去除⚠️错误信息：' + error.message);
